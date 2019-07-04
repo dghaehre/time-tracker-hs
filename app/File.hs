@@ -5,6 +5,7 @@ import            System.IO
 import            GHC.Generics
 import            Data.Aeson
 import            Data.Aeson.Types
+import            System.Directory
 import            Data.Text
 import qualified  Data.ByteString.Lazy as B
 
@@ -39,15 +40,17 @@ data Result' =
   | Finish  -- No message to user when process is finished
   | Err String
 
--- |
--- | TODO: Make dynamic
-projectPath = "/Users/danielhaehre/.time-tracker.json"
+projectPath :: IO FilePath
+projectPath = do
+  h <- getHomeDirectory
+  return $ h ++ "/.time-tracker.json"
 
 -- |
 -- | TODO: Check if file exist and try to create file if needed
 getStoredData :: IO (Either String StoredData)
 getStoredData = do
-  content <- B.readFile projectPath
+  p <- projectPath
+  content <- B.readFile p
   return $ parseContent content
       
 parseContent :: B.ByteString -> Either String StoredData 
@@ -57,4 +60,6 @@ parseContent = f . decode
     f Nothing = Left "Could not parse content" 
 
 save :: StoredData -> IO ()
-save = B.writeFile projectPath . encode
+save d = do
+  p <- projectPath
+  B.writeFile p $ encode d

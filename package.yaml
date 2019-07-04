@@ -25,6 +25,9 @@ dependencies:
 - aeson
 - text
 - bytestring
+- ansi-terminal
+- directory
+- time
 
 library:
   source-dirs: src
