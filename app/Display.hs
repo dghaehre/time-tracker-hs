@@ -1,6 +1,8 @@
 module Display where
 
 import System.Console.ANSI
+import Data.Time.Format
+import Data.Time.Clock
 
 import File
 
@@ -23,10 +25,9 @@ listProjects d = do
   _ <- mapM_ (putStrLn . File.name) $ projects d
   return Finish
 
--- TODO
 -- Get total amount of jobs and total time spent
 totalJobs :: [Job] -> (Int, Int)
-totalJobs j = (length j, 0)
+totalJobs j = (length j, sum $ map getSec $ map getTime j)
 
 concatJobs :: [Project] -> [Job]
 concatJobs = foldl (\b a -> jobs a ++ b) [] 
@@ -34,8 +35,11 @@ concatJobs = foldl (\b a -> jobs a ++ b) []
 displayToday :: Maybe [Project] -> IO Result'
 displayToday Nothing = return $ Err "No such project."
 displayToday (Just p) = do
-  setSGR [SetColor Foreground Vivid Yellow]
-  putStrLn $ "Today (" ++ show jobs ++ ") - " ++ show time ++ "\n"
+  setSGR [SetColor Foreground Vivid Green]
+  putStr "Projects worked on today\n\n"
+  displayBullet $ "Total jobs: " ++ show jobs
+  displayBullet $ "Total time: " ++ showSec time
+  putStrLn "------------------------------\n"
   displayJobs p
     where
       (jobs, time) = totalJobs $ concatJobs p
@@ -44,19 +48,33 @@ displayWeek :: Maybe [Project] -> IO Result'
 displayWeek Nothing = return $ Err "No such project."
 displayWeek (Just p) = do
   setSGR [SetColor Foreground Vivid Green]
-  putStrLn $ "This week: " ++ (show jobs) ++ "\n" 
+  putStr "Projects worked on this week\n\n"
+  displayBullet $ "Total jobs: " ++ show jobs
+  displayBullet $ "Total time: " ++ showSec time
+  putStrLn "------------------------------\n"
   displayJobs p
     where
       (jobs, time) = totalJobs $ concatJobs p
+
+displayBullet :: String -> IO ()
+displayBullet s = do
+  setSGR [SetColor Foreground Vivid Yellow]
+  putStr "* "
+  setSGR [SetColor Foreground Vivid White]
+  putStr $ s ++ "\n"
+  return ()
 
 displayRecord :: String -> String -> Int -> IO ()
 displayRecord project comment sec = do
   clearScreen
   setCursorPosition 0 0
+  setSGR [SetColor Foreground Vivid White]
+  putStr "Working "
   setSGR [SetColor Foreground Vivid Green]
-  putStrLn $ "| Running " ++ project ++ c comment
+  putStr $ project ++ "  "
   setSGR [SetColor Foreground Vivid Yellow]
-  putStrLn $ "| " ++ showSec sec
+  putStr $ "" ++ showSec sec ++ "\n"
+  putStrLn comment
   putStrLn ""
   setSGR [SetColor Foreground Vivid White]
   putStrLn "Press Enter to save job"
@@ -76,9 +94,15 @@ showSec sec = addZero h ++ "." ++ addZero m ++ "." ++ addZero s
     m = (sec `div` 60) `mod` 60
     h = (sec `div` (60 * 60)) `mod` 60
 
--- TODO
 getSec :: (String, String) -> Int
-getSec (start, end) = 0
+getSec (start, end) = (toSec end) - (toSec start)
+  where
+    toSec :: String -> Int
+    toSec = f' . parseTimeM True defaultTimeLocale "%F %R:%S%Q %Z"
+      where
+        f' :: Maybe UTCTime -> Int
+        f' Nothing  = 0
+        f' (Just t) = read $ formatTime defaultTimeLocale "%s" t
 
 getTime :: Job -> (String, String)
 getTime j = (startTime j, endTime j)
@@ -93,10 +117,15 @@ displayJobs p = do
         let 
           jobs' = jobs p
           l = show $ length jobs'
+        setSGR [SetColor Foreground Vivid Green]
+        putStr $ File.name p
+        setSGR [SetColor Foreground Vivid White]
+        putStr $ " (" ++ l ++ ") - "
         setSGR [SetColor Foreground Vivid Yellow]
-        putStrLn $ File.name p ++ " (" ++ l ++ ") - " ++ showSec (sum $ map getSec $map getTime jobs')
+        putStrLn $ showSec (sum $ map getSec $ map getTime jobs')
         setSGR [SetColor Foreground Vivid White]
         _ <- mapM_ displayJob $ jobs p
+        putStr "\n"
         return ()
 
 displaySave :: String -> String -> IO ()
@@ -104,14 +133,15 @@ displaySave p j = do
   clearScreen
   setCursorPosition 0 0
   setSGR [SetColor Foreground Vivid Yellow]
-  putStrLn "| Saving job"
+  putStrLn "* Saving job"
   putStrLn ""
   return ()
 
 displayJob :: Job -> IO ()
 displayJob j = do
-  putStrLn " Job"
-        
+  displayBullet $ s ++ " (0) " ++ description j
+    where
+      s = showSec $ getSec $ getTime j
 
 displayProject :: [Project] -> IO Result'
 displayProject p = do
