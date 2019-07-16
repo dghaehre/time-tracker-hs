@@ -169,7 +169,7 @@ record' d project job = do
 
 saveJob :: String -> String -> UTCTime -> IO Result'
 saveJob p j start = do
-  displaySave p j
+  displaySave p j start
   d <- getStoredData
   end <- getCurrentTime
   either (\e -> return $ Err e) (save' p j start end) d

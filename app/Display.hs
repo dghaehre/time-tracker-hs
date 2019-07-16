@@ -20,8 +20,9 @@ displayEnd (Err s) = do
 listProjects :: StoredData -> IO Result'
 listProjects d = do
   setSGR [SetColor Foreground Vivid Green]
-  putStrLn "Your current projects:"
-  setSGR [SetColor Foreground Vivid Yellow]
+  putStr "Projects: "
+  setSGR [SetColor Foreground Vivid White]
+  putStrLn $ "(" ++ show (length (projects d)) ++ ")"
   _ <- mapM_ (putStrLn . File.name) $ projects d
   return Finish
 
@@ -128,12 +129,14 @@ displayJobs p = do
         putStr "\n"
         return ()
 
-displaySave :: String -> String -> IO ()
-displaySave p j = do
+displaySave :: String -> String -> UTCTime -> IO ()
+displaySave p j start = do
+  end <- getCurrentTime
   clearScreen
   setCursorPosition 0 0
   setSGR [SetColor Foreground Vivid Yellow]
-  putStrLn "* Saving job"
+  putStrLn "Saving"
+  displayBullet $ "Time spent: " ++ showSec (getSec (show start, show end))
   putStrLn ""
   return ()
 
