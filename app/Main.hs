@@ -21,6 +21,7 @@ data Argument =
   | New     { project :: String }
   | Today   { project :: String }
   | Week    { project :: String }
+  | Month   { project :: String }
   | Delete  { project :: String }
   | List
   | Start   { project :: String
@@ -32,6 +33,7 @@ data Operation =
   | New' StoredData String
   | Today' StoredData String --
   | Week' StoredData String --
+  | Month' StoredData String --
   | Error' String
   | Delete' StoredData String
   | List' StoredData
@@ -46,6 +48,9 @@ today = Today { project = def &= help "Project name" &= typ "name" }
 
 week :: Argument
 week = Week { project = def &= help "Project name" &= typ "name" }
+
+month :: Argument
+month = Month { project = def &= help "Project name" &= typ "name" }
 
 new :: Argument
 new = New 
@@ -73,6 +78,7 @@ operation List (Right p)        = List' p
 operation (Delete s) (Right p)  = Delete' p s
 operation (Today s) (Right p)   = Today' p s
 operation (Week s) (Right p)    = Week' p s
+operation (Month s) (Right p)   = Month' p s
 operation (Start s c) (Right p) = Start' p s c
 operation _ (Right p)           = Display' p
 
@@ -101,6 +107,14 @@ filterWeek t start end = t' <= utctDay start'
     start' = read start :: UTCTime
     (y, m, d) = toWeekDate $ utctDay t
     t' = fromWeekDate y m 0
+
+-- TODO: handle first week in january..
+filterMonth :: UTCTime -> String -> String -> Bool
+filterMonth t start end = t' <= utctDay start'
+  where
+    start' = read start :: UTCTime
+    (y, m, d) = toWeekDate $ utctDay t
+    t' = fromWeekDate y (m - 1) 0
 
 maybe' :: (a -> b) -> Maybe a -> Maybe b
 maybe' f a
@@ -143,6 +157,7 @@ runOperation _ (List' d)      = listProjects d
 runOperation _ (Delete' d s)  = deleteProject d s
 runOperation t (Today' d s)   = displayToday $ getByTime (filterToday t) s d
 runOperation t (Week' d s)    = displayWeek $ getByTime (filterWeek t) s d
+runOperation t (Month' d s)   = displayMonth $ getByTime (filterMonth t) s d
 runOperation _ (Start' d s c) = record' d s c
 runOperation _ _              = return $ Err "Operation not ready"
 
@@ -184,7 +199,7 @@ saveJob p j start = do
 
 main :: IO ()
 main = do
-  input <- cmdArgs $ modes [new, start, display, list, delete, today, week]
+  input <- cmdArgs $ modes [new, start, display, list, delete, today, week, month]
     &= help "Track time spent on projects" 
     &= program "tt" 
     &= summary "Time tracker v0.1"

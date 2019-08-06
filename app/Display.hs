@@ -57,6 +57,18 @@ displayWeek (Just p) = do
     where
       (jobs, time) = totalJobs $ concatJobs p
 
+displayMonth :: Maybe [Project] -> IO Result'
+displayMonth Nothing = return $ Err "No such project."
+displayMonth (Just p) = do
+  setSGR [SetColor Foreground Vivid Green]
+  putStr "Projects worked on this month\n\n"
+  displayBullet $ "Total jobs: " ++ show jobs
+  displayBullet $ "Total time: " ++ showSec time
+  putStrLn "------------------------------\n"
+  displayJobs p
+    where
+      (jobs, time) = totalJobs $ concatJobs p
+
 displayBullet :: String -> IO ()
 displayBullet s = do
   setSGR [SetColor Foreground Vivid Yellow]
