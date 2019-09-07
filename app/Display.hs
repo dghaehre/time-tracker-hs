@@ -1,10 +1,11 @@
 module Display where
 
 import System.Console.ANSI
-import Data.Time.Format
 import Data.Time.Clock
 
 import File
+
+type ProjectsWithDay = (String, [Project])
 
 displayEnd :: Result' -> IO ()
 displayEnd Ok = do
@@ -27,47 +28,78 @@ listProjects d = do
   return Finish
 
 -- Get total amount of jobs and total time spent
-totalJobs :: [Job] -> (Int, Int)
+totalJobs :: [Job] -> (Int, NominalDiffTime)
 totalJobs j = (length j, sum $ map getSec $ map getTime j)
 
 concatJobs :: [Project] -> [Job]
 concatJobs = foldl (\b a -> jobs a ++ b) [] 
+
+-- TODO
+sortByDay :: [Project] -> [ProjectsWithDay]
+sortByDay _ = []
+ {--
+  where
+    go :: [Project] -> [ProjectsWithDay] -> [ProjectsWithDay] 
+    go [] pd = pd
+    go (p:ps') pd = go ps' pd 
+      where
+        new :: [ProjectsWithDay]
+        new = foldl f [] (jobs p)
+        f b a = b
+        toDay :: String -> UTC Day
+        toDay x = utcDay $ read x :: UTCTime
+        --}
 
 displayToday :: Maybe [Project] -> IO Result'
 displayToday Nothing = return $ Err "No such project."
 displayToday (Just p) = do
   setSGR [SetColor Foreground Vivid Green]
   putStr "Projects worked on today\n\n"
-  displayBullet $ "Total jobs: " ++ show jobs
-  displayBullet $ "Total time: " ++ showSec time
+  displayBullet $ "Total jobs: " ++ show j
+  displayBullet $ "Total time: " ++ showSec t
   putStrLn "------------------------------\n"
   displayJobs p
     where
-      (jobs, time) = totalJobs $ concatJobs p
+      (j, t) = totalJobs $ concatJobs p
 
-displayWeek :: Maybe [Project] -> IO Result'
-displayWeek Nothing = return $ Err "No such project."
-displayWeek (Just p) = do
+displayWeek :: Bool -> Maybe [Project] -> IO Result'
+displayWeek _ Nothing = return $ Err "No such project."
+displayWeek byDay (Just p) = do
   setSGR [SetColor Foreground Vivid Green]
   putStr "Projects worked on this week\n\n"
-  displayBullet $ "Total jobs: " ++ show jobs
-  displayBullet $ "Total time: " ++ showSec time
+  displayBullet $ "Total jobs: " ++ show j
+  displayBullet $ "Total time: " ++ showSec t
   putStrLn "------------------------------\n"
-  displayJobs p
+  display' byDay
     where
-      (jobs, time) = totalJobs $ concatJobs p
+      (j, t) = totalJobs $ concatJobs p
+      displayDay p' = do
+        putStr $ "\n" ++ fst p' ++ "\n"
+        displayJobs $ snd p'
+      display' False = displayJobs p
+      display' True = do
+        r <- mapM displayDay $ sortByDay p
+        return' r Finish
+          where
+            -- TODO semi ready
+            return' :: [Result'] -> Result' -> IO Result'
+            return' [] r' = return r'
+            return' ((Err e):xs) (Err e') = return' xs (Err $ e ++ "|" ++ e')
+            return' ((Err e):xs) _ = return' xs (Err e)
+            return' (_:xs) (Err e) = return' xs (Err e)
+            return' (x:xs) _ = return' xs x
 
 displayMonth :: Maybe [Project] -> IO Result'
 displayMonth Nothing = return $ Err "No such project."
 displayMonth (Just p) = do
   setSGR [SetColor Foreground Vivid Green]
   putStr "Projects worked on this month\n\n"
-  displayBullet $ "Total jobs: " ++ show jobs
-  displayBullet $ "Total time: " ++ showSec time
+  displayBullet $ "Total jobs: " ++ show j
+  displayBullet $ "Total time: " ++ showSec t
   putStrLn "------------------------------\n"
   displayJobs p
     where
-      (jobs, time) = totalJobs $ concatJobs p
+      (j, t) = totalJobs $ concatJobs p
 
 displayBullet :: String -> IO ()
 displayBullet s = do
@@ -77,7 +109,7 @@ displayBullet s = do
   putStr $ s ++ "\n"
   return ()
 
-displayRecord :: String -> String -> Int -> IO ()
+displayRecord :: String -> String -> NominalDiffTime -> IO ()
 displayRecord project comment sec = do
   clearScreen
   setCursorPosition 0 0
@@ -92,22 +124,21 @@ displayRecord project comment sec = do
   setSGR [SetColor Foreground Vivid White]
   putStrLn "Press Enter to save job"
   return ()
-    where
-      c :: String -> String
-      c "" = ""
-      c c' = " - " ++ c'
 
-showSec :: Int -> String
+showSec :: NominalDiffTime -> String
 showSec sec = addZero h ++ "." ++ addZero m ++ "." ++ addZero s
   where
-    addZero :: Int -> String
+    sec' = round sec :: Int
     addZero s' | s' < 10 = "0" ++ show s'
     addZero s' | otherwise = show s'
-    s = sec `mod` 60
-    m = (sec `div` 60) `mod` 60
-    h = (sec `div` (60 * 60)) `mod` 60
+    s = sec' `mod` 60
+    m = (sec' `div` 60) `mod` 60
+    h = sec' `div` (60 * 60)
 
-getSec :: (String, String) -> Int
+getSec :: (UTCTime, UTCTime) -> NominalDiffTime
+getSec (a, b) = b `diffUTCTime` a
+
+  {--
 getSec (start, end) = (toSec end) - (toSec start)
   where
     toSec :: String -> Int
@@ -116,8 +147,9 @@ getSec (start, end) = (toSec end) - (toSec start)
         f' :: Maybe UTCTime -> Int
         f' Nothing  = 0
         f' (Just t) = read $ formatTime defaultTimeLocale "%s" t
+        --}
 
-getTime :: Job -> (String, String)
+getTime :: Job -> (UTCTime, UTCTime)
 getTime j = (startTime j, endTime j)
 
 displayJobs :: [Project] -> IO Result'
@@ -126,29 +158,29 @@ displayJobs p = do
   return Finish
     where
       d :: Project -> IO ()
-      d p = do
+      d p' = do
         let 
-          jobs' = jobs p
+          jobs' = jobs p'
           l = show $ length jobs'
         setSGR [SetColor Foreground Vivid Green]
-        putStr $ File.name p
+        putStr $ File.name p'
         setSGR [SetColor Foreground Vivid White]
         putStr $ " (" ++ l ++ ") - "
         setSGR [SetColor Foreground Vivid Yellow]
         putStrLn $ showSec (sum $ map getSec $ map getTime jobs')
         setSGR [SetColor Foreground Vivid White]
-        _ <- mapM_ displayJob $ jobs p
+        _ <- mapM_ displayJob $ jobs p'
         putStr "\n"
         return ()
 
 displaySave :: String -> String -> UTCTime -> IO ()
-displaySave p j start = do
+displaySave _ _ start = do
   end <- getCurrentTime
   clearScreen
   setCursorPosition 0 0
   setSGR [SetColor Foreground Vivid Yellow]
   putStrLn "Saving"
-  displayBullet $ "Time spent: " ++ showSec (getSec (show start, show end))
+  displayBullet $ "Time spent: " ++ showSec (getSec (start, end))
   putStrLn ""
   return ()
 
@@ -159,6 +191,6 @@ displayJob j = do
       s = showSec $ getSec $ getTime j
 
 displayProject :: [Project] -> IO Result'
-displayProject p = do
+displayProject _ = do
   putStrLn "Display project"
   return Finish

@@ -1,12 +1,10 @@
 {-# LANGUAGE OverloadedStrings, DeriveGeneric #-}
 module File where
 
-import            System.IO
 import            GHC.Generics
 import            Data.Aeson
-import            Data.Aeson.Types
 import            System.Directory
-import            Data.Text
+import            Data.Time
 import qualified  Data.ByteString.Lazy as B
 
 data StoredData = StoredData
@@ -27,8 +25,8 @@ instance ToJSON Project
 
 data Job = Job
   { description :: String
-  , startTime   :: String
-  , endTime     :: String
+  , startTime   :: UTCTime
+  , endTime     :: UTCTime
   }
   deriving (Show, Read, Generic)
 
@@ -51,14 +49,8 @@ getStoredData :: IO (Either String StoredData)
 getStoredData = do
   p <- projectPath
   content <- B.readFile p
-  return $ parseContent content
+  return $ eitherDecode content
       
-parseContent :: B.ByteString -> Either String StoredData 
-parseContent = f . decode
-  where
-    f (Just v) = Right v
-    f Nothing = Left "Could not parse content" 
-
 save :: StoredData -> IO ()
 save d = do
   p <- projectPath

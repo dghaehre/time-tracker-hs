@@ -4,12 +4,9 @@ module Main where
 
 import System.IO
 import System.Console.CmdArgs
-import System.Console.CmdArgs.Implicit
 import Control.Concurrent
 import Data.Maybe
 import Data.Time.Clock
-import Data.Time.Format
-import Data.Time.Calendar
 import Data.Time.Calendar.WeekDate
 
 
@@ -20,7 +17,8 @@ data Argument =
     Display { project :: String }
   | New     { project :: String }
   | Today   { project :: String }
-  | Week    { project :: String }
+  | Week    { project :: String
+            , byDay   :: Bool   }
   | Month   { project :: String }
   | Delete  { project :: String }
   | List
@@ -31,9 +29,9 @@ data Argument =
 data Operation =
     Display' StoredData
   | New' StoredData String
-  | Today' StoredData String --
-  | Week' StoredData String --
-  | Month' StoredData String --
+  | Today' StoredData String
+  | Week' StoredData Bool String
+  | Month' StoredData String
   | Error' String
   | Delete' StoredData String
   | List' StoredData
@@ -47,7 +45,8 @@ today :: Argument
 today = Today { project = def &= help "Project name" &= typ "name" }
 
 week :: Argument
-week = Week { project = def &= help "Project name" &= typ "name" }
+week = Week { project = def &= help "Project name" &= typ "name"
+            , byDay = def &= help "Sorted by day" &= typ "by-day" }
 
 month :: Argument
 month = Month { project = def &= help "Project name" &= typ "name" }
@@ -77,13 +76,13 @@ operation (New s) (Right p)     = New' p s
 operation List (Right p)        = List' p
 operation (Delete s) (Right p)  = Delete' p s
 operation (Today s) (Right p)   = Today' p s
-operation (Week s) (Right p)    = Week' p s
+operation (Week s d) (Right p)  = Week' p d s
 operation (Month s) (Right p)   = Month' p s
 operation (Start s c) (Right p) = Start' p s c
 operation _ (Right p)           = Display' p
 
 elemName :: String -> [Project] -> Bool
-elemName s [] = False 
+elemName _ [] = False 
 elemName s (x:xs) 
   | File.name x == s = True
   | otherwise = elemName s xs
@@ -96,24 +95,20 @@ getProjects p d
   where
     byName = filter (\x -> File.name x == p) $ projects d
 
-filterToday :: UTCTime -> String -> String -> Bool
-filterToday t start end = utctDay t <= utctDay start'
-  where
-    start' = read start :: UTCTime
+filterToday :: UTCTime -> UTCTime -> UTCTime -> Bool
+filterToday t s _ = utctDay t <= utctDay s
 
-filterWeek :: UTCTime -> String -> String -> Bool
-filterWeek t start end = t' <= utctDay start'
+filterWeek :: UTCTime -> UTCTime -> UTCTime -> Bool
+filterWeek t s _ = t' <= utctDay s
   where
-    start' = read start :: UTCTime
-    (y, m, d) = toWeekDate $ utctDay t
+    (y, m, _) = toWeekDate $ utctDay t
     t' = fromWeekDate y m 0
 
 -- TODO: handle first week in january..
-filterMonth :: UTCTime -> String -> String -> Bool
-filterMonth t start end = t' <= utctDay start'
+filterMonth :: UTCTime -> UTCTime -> UTCTime -> Bool
+filterMonth t s _ = t' <= utctDay s
   where
-    start' = read start :: UTCTime
-    (y, m, d) = toWeekDate $ utctDay t
+    (y, m, _) = toWeekDate $ utctDay t
     t' = fromWeekDate y (m - 1) 0
 
 maybe' :: (a -> b) -> Maybe a -> Maybe b
@@ -121,13 +116,13 @@ maybe' f a
   | isJust a  = Just $ f $ fromJust a
   | otherwise = Nothing
 
-getByTime :: (String -> String -> Bool) -> String -> StoredData -> Maybe [Project]
+getByTime :: (UTCTime -> UTCTime -> Bool) -> String -> StoredData -> Maybe [Project]
 getByTime f n = maybe' (filter noJobs . map (filterJobs f)) . getProjects n
   where
     noJobs x = 0 < length (File.jobs x)
 
 -- Remove jobs that is not relevant
-filterJobs :: (String -> String -> Bool) -> Project -> Project
+filterJobs :: (UTCTime -> UTCTime -> Bool) -> Project -> Project
 filterJobs f p = File.Project n filteredJobs
   where
     n             = File.name p
@@ -156,16 +151,17 @@ runOperation _ (New' d s)     = createNew d s
 runOperation _ (List' d)      = listProjects d
 runOperation _ (Delete' d s)  = deleteProject d s
 runOperation t (Today' d s)   = displayToday $ getByTime (filterToday t) s d
-runOperation t (Week' d s)    = displayWeek $ getByTime (filterWeek t) s d
+runOperation t (Week' d d' s) = displayWeek d' $ getByTime (filterWeek t) s d
 runOperation t (Month' d s)   = displayMonth $ getByTime (filterMonth t) s d
 runOperation _ (Start' d s c) = record' d s c
-runOperation _ _              = return $ Err "Operation not ready"
+runOperation _ (Error' e)     = return $ Err e
+runOperation _ (Display' _)   = return $ Err "Display operation not ready"
 
 record' :: StoredData -> String -> String -> IO Result'
-record' d project job = do
+record' d p job = do
   t <- getCurrentTime
-  if elemName project (projects d)
-  then go project job 0 t False
+  if elemName p (projects d)
+  then go p job 0 t False
   else return $ Err "No such project"
    where
     isEnter :: Bool -> IO Bool
@@ -173,28 +169,28 @@ record' d project job = do
     isEnter True  = do
       c <- getChar
       return $ c == '\n'
-    go :: String -> String -> Int -> UTCTime -> Bool -> IO Result'
-    go s c sec start True = saveJob s c start
-    go s c sec start _ = do
+    go :: String -> String -> NominalDiffTime -> UTCTime -> Bool -> IO Result'
+    go s c _ s' True = saveJob s c s'
+    go s c sec s' _ = do
       displayRecord s c sec
       threadDelay 1000000 --sleep for a million microseconds, or one second
       input <- hReady stdin
       finish <- isEnter input
-      go s c (sec + 1) start finish
+      go s c (sec + 1) s' finish
 
 saveJob :: String -> String -> UTCTime -> IO Result'
-saveJob p j start = do
-  displaySave p j start
+saveJob p j s = do
+  displaySave p j s
   d <- getStoredData
   end <- getCurrentTime
-  either (\e -> return $ Err e) (save' p j start end) d
+  either (\e -> return $ Err e) (save' s end) d
     where
       addJob s' e' p'
-        | File.name p' == p = Project (File.name p') (File.jobs p' ++ [ Job j (show s') (show e') ]) -- TODO
+        | File.name p' == p = Project (File.name p') (File.jobs p' ++ [ Job j s' e' ]) -- TODO
         | otherwise         = p'
-      save' :: String -> String -> UTCTime -> UTCTime -> StoredData -> IO Result'
-      save' p j start end d = do
-        save $ StoredData $ map (addJob start end) $ projects d
+      save' :: UTCTime -> UTCTime -> StoredData -> IO Result'
+      save' s' end d = do
+        save $ StoredData $ map (addJob s' end) $ projects d
         return Ok
 
 main :: IO ()
