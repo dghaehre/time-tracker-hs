@@ -13,7 +13,7 @@ import Data.Time.Calendar.WeekDate
 import File
 import Display
 
-data Argument = 
+data Argument =
     Display { project :: String }
   | New     { project :: String }
   | Today   { project :: String }
@@ -52,14 +52,14 @@ month :: Argument
 month = Month { project = def &= help "Project name" &= typ "name" }
 
 new :: Argument
-new = New 
+new = New
   { project = def &= typ "<Project name>" &= argPos 0
   } &= help "Create new project"
 
 start :: Argument
-start = Start 
+start = Start
   { project = def &= typ "<Project name>" &= argPos 0
-  , comment = def &= help "Comment" &= typ "comment" 
+  , comment = def &= help "Comment" &= typ "comment"
   }
 
 list :: Argument
@@ -82,8 +82,8 @@ operation (Start s c) (Right p) = Start' p s c
 operation _ (Right p)           = Display' p
 
 elemName :: String -> [Project] -> Bool
-elemName _ [] = False 
-elemName s (x:xs) 
+elemName _ [] = False
+elemName s (x:xs)
   | File.name x == s = True
   | otherwise = elemName s xs
 
@@ -130,7 +130,7 @@ filterJobs f p = File.Project n filteredJobs
     isRelevant j  = f (File.startTime j) (File.endTime j)
 
 createNew :: StoredData -> String -> IO Result'
-createNew d p 
+createNew d p
   | elemName p (projects d) = return (Err "Project already exist")
   | otherwise = do
     _ <- save $ StoredData $ projects d ++ [ Project p [] ]
@@ -140,7 +140,7 @@ deleteProject :: StoredData -> String -> IO Result'
 deleteProject d p
   | not exist = return (Err "Project already exist")
   | otherwise = do
-    _ <- save $ StoredData $ filter remove $ projects d 
+    _ <- save $ StoredData $ filter remove $ projects d
     return Ok
       where
         exist = elemName p (projects d)
@@ -196,10 +196,10 @@ saveJob p j s = do
 main :: IO ()
 main = do
   input <- cmdArgs $ modes [new, start, display, list, delete, today, week, month]
-    &= help "Track time spent on projects" 
-    &= program "tt" 
+    &= help "Track time spent on projects"
+    &= program "tt"
     &= summary "Time tracker v0.1"
   d <- getStoredData
   t <- getCurrentTime
-  res <- runOperation t $ operation input d 
+  res <- runOperation t $ operation input d
   displayEnd res

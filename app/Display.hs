@@ -32,23 +32,11 @@ totalJobs :: [Job] -> (Int, NominalDiffTime)
 totalJobs j = (length j, sum $ map getSec $ map getTime j)
 
 concatJobs :: [Project] -> [Job]
-concatJobs = foldl (\b a -> jobs a ++ b) [] 
+concatJobs = foldl (\b a -> jobs a ++ b) []
 
 -- TODO
 sortByDay :: [Project] -> [ProjectsWithDay]
 sortByDay _ = []
- {--
-  where
-    go :: [Project] -> [ProjectsWithDay] -> [ProjectsWithDay] 
-    go [] pd = pd
-    go (p:ps') pd = go ps' pd 
-      where
-        new :: [ProjectsWithDay]
-        new = foldl f [] (jobs p)
-        f b a = b
-        toDay :: String -> UTC Day
-        toDay x = utcDay $ read x :: UTCTime
-        --}
 
 displayToday :: Maybe [Project] -> IO Result'
 displayToday Nothing = return $ Err "No such project."
@@ -159,7 +147,7 @@ displayJobs p = do
     where
       d :: Project -> IO ()
       d p' = do
-        let 
+        let
           jobs' = jobs p'
           l = show $ length jobs'
         setSGR [SetColor Foreground Vivid Green]
