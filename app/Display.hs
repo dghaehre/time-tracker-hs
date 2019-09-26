@@ -1,11 +1,14 @@
 module Display where
 
-import System.Console.ANSI
-import Data.Time.Clock
+import            System.Console.ANSI
+import            Data.Time.Clock
+import            Data.Time.Calendar
+import            Data.Time.Format
+import qualified  Data.Map.Lazy        as M
 
 import File
 
-type ProjectsWithDay = (String, [Project])
+type ProjectsWithDay = M.Map Day [Project]
 
 displayEnd :: Result' -> IO ()
 displayEnd Ok = do
@@ -34,9 +37,21 @@ totalJobs j = (length j, sum $ map getSec $ map getTime j)
 concatJobs :: [Project] -> [Job]
 concatJobs = foldl (\b a -> jobs a ++ b) []
 
--- TODO
-sortByDay :: [Project] -> [ProjectsWithDay]
-sortByDay _ = []
+sortByDay :: [Project] -> ProjectsWithDay
+sortByDay ps = go ps $ M.fromList []
+  where
+    go :: [Project] -> ProjectsWithDay -> ProjectsWithDay
+    go [] d = d
+    go (p:ps') d = go ps' $ M.unionWith (++) d $ createWithDay p
+
+createWithDay :: Project -> ProjectsWithDay
+createWithDay p = M.fromListWith concat' jobs'
+  where
+    projectName = name p
+    concat' :: [Project] -> [Project] -> [Project]
+    concat' a b = [Project projectName $ concatJobs a ++ concatJobs b]
+    jobs' = map addDay $ jobs p 
+    addDay j = (utctDay $ startTime j, [Project projectName [j]])
 
 displayToday :: Maybe [Project] -> IO Result'
 displayToday Nothing = return $ Err "No such project."
@@ -50,6 +65,17 @@ displayToday (Just p) = do
     where
       (j, t) = totalJobs $ concatJobs p
 
+showDay :: Day -> IO ()
+showDay d = do
+  setSGR [SetColor Foreground Vivid Yellow]
+  putStr " ** "
+  setSGR [SetColor Foreground Vivid Blue]
+  putStr $ formatTime defaultTimeLocale "%A" d
+  setSGR [SetColor Foreground Vivid Yellow]
+  putStr " **\n"
+  setSGR [SetColor Foreground Vivid White]
+  putStr $ "   " ++ show d ++ "\n"
+
 displayWeek :: Bool -> Maybe [Project] -> IO Result'
 displayWeek _ Nothing = return $ Err "No such project."
 displayWeek byDay (Just p) = do
@@ -62,11 +88,13 @@ displayWeek byDay (Just p) = do
     where
       (j, t) = totalJobs $ concatJobs p
       displayDay p' = do
-        putStr $ "\n" ++ fst p' ++ "\n"
+        putStr "\n"
+        showDay (fst p')
+        putStr "\n"
         displayJobs $ snd p'
       display' False = displayJobs p
       display' True = do
-        r <- mapM displayDay $ sortByDay p
+        r <- mapM displayDay $ M.toList $ sortByDay p
         return' r Finish
           where
             -- TODO semi ready
@@ -76,6 +104,7 @@ displayWeek byDay (Just p) = do
             return' ((Err e):xs) _ = return' xs (Err e)
             return' (_:xs) (Err e) = return' xs (Err e)
             return' (x:xs) _ = return' xs x
+
 
 displayMonth :: Maybe [Project] -> IO Result'
 displayMonth Nothing = return $ Err "No such project."

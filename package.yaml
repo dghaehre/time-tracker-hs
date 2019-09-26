@@ -28,6 +28,7 @@ dependencies:
 - ansi-terminal
 - directory
 - time
+- containers
 
 library:
   source-dirs: src
