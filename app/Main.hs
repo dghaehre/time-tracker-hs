@@ -22,6 +22,7 @@ data Argument =
   | Month   { project :: String }
   | Delete  { project :: String }
   | List
+  | Init
   | Start   { project :: String
             , comment :: String }
   deriving (Show, Data, Typeable)
@@ -33,6 +34,7 @@ data Operation =
   | Week' StoredData Bool String
   | Month' StoredData String
   | Error' String
+  | Init'
   | Delete' StoredData String
   | List' StoredData
   | Start' StoredData String String
@@ -65,13 +67,21 @@ start = Start
 list :: Argument
 list = List &= help "List out stored projects."
 
+initP :: Argument
+initP = Init &= help "Create file in home folder."
+
 delete :: Argument
 delete = Delete
   { project = def &= typ "<Project name>" &= argPos 0
   } &= help "Delete project"
 
-operation :: Argument -> Either String StoredData -> Operation
-operation _ (Left s)            = Error' s
+toErr :: FileError -> String
+toErr NotFound = "Could not find file.\nRun 'tt init' to create file in home directory."
+toErr (Other s) = s
+
+operation :: Argument -> Either FileError StoredData -> Operation
+operation Init _                = Init'
+operation _ (Left e)            = Error' $ toErr e
 operation (New s) (Right p)     = New' p s
 operation List (Right p)        = List' p
 operation (Delete s) (Right p)  = Delete' p s
@@ -154,6 +164,7 @@ runOperation t (Today' d s)   = displayToday $ getByTime (filterToday t) s d
 runOperation t (Week' d d' s) = displayWeek d' $ getByTime (filterWeek t) s d
 runOperation t (Month' d s)   = displayMonth $ getByTime (filterMonth t) s d
 runOperation _ (Start' d s c) = record' d s c
+runOperation _ Init'          = createFile
 runOperation _ (Error' e)     = return $ Err e
 runOperation _ (Display' _)   = return $ Err "Display operation not ready"
 
@@ -184,7 +195,7 @@ saveJob p j s = do
   displaySave p j s
   d <- getStoredData
   end <- getCurrentTime
-  either (\e -> return $ Err e) (save' s end) d
+  either (\e -> return $ Err (toErr e)) (save' s end) d
     where
       addJob s' e' p'
         | File.name p' == p = Project (File.name p') (File.jobs p' ++ [ Job j s' e' ]) -- TODO
@@ -196,7 +207,7 @@ saveJob p j s = do
 
 main :: IO ()
 main = do
-  input <- cmdArgs $ modes [new, start, display, list, delete, today, week, month]
+  input <- cmdArgs $ modes [new, start, display, list, delete, today, week, month, initP]
     &= help "Track time spent on projects"
     &= program "tt"
     &= summary "Time tracker v0.1"

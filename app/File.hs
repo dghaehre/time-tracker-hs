@@ -38,19 +38,35 @@ data Result' =
   | Finish  -- No message to user when process is finished
   | Err String
 
+data FileError =
+    NotFound
+  | Other String
+
 projectPath :: IO FilePath
 projectPath = do
   h <- getHomeDirectory
   return $ h ++ "/.time-tracker.json"
 
--- |
--- | TODO: Check if file exist and try to create file if needed
-getStoredData :: IO (Either String StoredData)
+getStoredData :: IO (Either FileError StoredData)
 getStoredData = do
   p <- projectPath
-  content <- B.readFile p
-  return $ eitherDecode content
+  b <- doesFileExist p
+  go b p
+    where
+      go :: Bool -> FilePath -> IO (Either FileError StoredData)
+      go False _ = return $ Left NotFound
+      go _ p' = do
+        content <- B.readFile p'
+        return $ case eitherDecode content of
+          Left s -> Left (Other s)
+          Right s -> Right s
       
+createFile :: IO Result'
+createFile = do
+  p <- projectPath
+  writeFile p "{\"projects\":[]}"
+  return Ok
+
 save :: StoredData -> IO ()
 save d = do
   p <- projectPath
