@@ -174,9 +174,10 @@ record' d p job = do
     go s c sec s' _ = do
       displayRecord s c sec
       threadDelay 1000000 --sleep for a million microseconds, or one second
+      t' <- getCurrentTime
       input <- hReady stdin
       finish <- isEnter input
-      go s c (sec + 1) s' finish
+      go s c (t' `diffUTCTime` s') s' finish
 
 saveJob :: String -> String -> UTCTime -> IO Result'
 saveJob p j s = do
