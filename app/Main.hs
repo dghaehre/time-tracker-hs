@@ -19,7 +19,8 @@ data Argument =
   | Today   { project :: String }
   | Week    { project :: String
             , byDay   :: Bool   }
-  | Month   { project :: String }
+  | Month   { project :: String
+            , byDay   :: Bool   }
   | Delete  { project :: String }
   | List
   | Init
@@ -32,7 +33,7 @@ data Operation =
   | New' StoredData String
   | Today' StoredData String
   | Week' StoredData Bool String
-  | Month' StoredData String
+  | Month' StoredData Bool String
   | Error' String
   | Init'
   | Delete' StoredData String
@@ -51,7 +52,8 @@ week = Week { project = def &= help "Project name" &= typ "name"
             , byDay = def &= help "Sorted by day" &= typ "by-day" }
 
 month :: Argument
-month = Month { project = def &= help "Project name" &= typ "name" }
+month = Month { project = def &= help "Project name" &= typ "name"
+              , byDay = def &= help "Sorted by day" &= typ "by-day" }
 
 new :: Argument
 new = New
@@ -86,8 +88,8 @@ operation (New s) (Right p)     = New' p s
 operation List (Right p)        = List' p
 operation (Delete s) (Right p)  = Delete' p s
 operation (Today s) (Right p)   = Today' p s
-operation (Week s d) (Right p)  = Week' p d s
-operation (Month s) (Right p)   = Month' p s
+operation (Week s b) (Right p)  = Week' p b s
+operation (Month s b) (Right p)   = Month' p b s
 operation (Start s c) (Right p) = Start' p s c
 operation _ (Right p)           = Display' p
 
@@ -161,8 +163,8 @@ runOperation _ (New' d s)     = createNew d s
 runOperation _ (List' d)      = listProjects d
 runOperation _ (Delete' d s)  = deleteProject d s
 runOperation t (Today' d s)   = displayToday $ getByTime (filterToday t) s d
-runOperation t (Week' d d' s) = displayWeek d' $ getByTime (filterWeek t) s d
-runOperation t (Month' d s)   = displayMonth $ getByTime (filterMonth t) s d
+runOperation t (Week' d b s)  = displayWeek b $ getByTime (filterWeek t) s d
+runOperation t (Month' d b s) = displayMonth b $ getByTime (filterMonth t) s d
 runOperation _ (Start' d s c) = record' d s c
 runOperation _ Init'          = createFile
 runOperation _ (Error' e)     = return $ Err e

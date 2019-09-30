@@ -84,37 +84,19 @@ displayWeek byDay (Just p) = do
   displayBullet $ "Total jobs: " ++ show j
   displayBullet $ "Total time: " ++ showSec t
   putStrLn "------------------------------\n"
-  display' byDay
+  if byDay then displayByDay p else displayJobs p
     where
       (j, t) = totalJobs $ concatJobs p
-      displayDay p' = do
-        putStr "\n"
-        showDay (fst p')
-        putStr "\n"
-        displayJobs $ snd p'
-      display' False = displayJobs p
-      display' True = do
-        r <- mapM displayDay $ M.toList $ sortByDay p
-        return' r Finish
-          where
-            -- TODO semi ready
-            return' :: [Result'] -> Result' -> IO Result'
-            return' [] r' = return r'
-            return' ((Err e):xs) (Err e') = return' xs (Err $ e ++ "|" ++ e')
-            return' ((Err e):xs) _ = return' xs (Err e)
-            return' (_:xs) (Err e) = return' xs (Err e)
-            return' (x:xs) _ = return' xs x
 
-
-displayMonth :: Maybe [Project] -> IO Result'
-displayMonth Nothing = return $ Err "No such project."
-displayMonth (Just p) = do
+displayMonth :: Bool -> Maybe [Project] -> IO Result'
+displayMonth _ Nothing = return $ Err "No such project."
+displayMonth byDay (Just p) = do
   setSGR [SetColor Foreground Vivid Green]
   putStr "Projects worked on this month\n\n"
   displayBullet $ "Total jobs: " ++ show j
   displayBullet $ "Total time: " ++ showSec t
   putStrLn "------------------------------\n"
-  displayJobs p
+  if byDay then displayByDay p else displayJobs p
     where
       (j, t) = totalJobs $ concatJobs p
 
@@ -125,6 +107,23 @@ displayBullet s = do
   setSGR [SetColor Foreground Vivid White]
   putStr $ s ++ "\n"
   return ()
+
+displayByDay :: [Project] -> IO Result'
+displayByDay p = do
+  r <- mapM displayDay $ M.toList $ sortByDay p
+  return' r Finish
+    where
+      displayDay p' = do
+        putStr "\n"
+        showDay (fst p')
+        putStr "\n"
+        displayJobs $ snd p'
+      return' :: [Result'] -> Result' -> IO Result'
+      return' [] r' = return r'
+      return' ((Err e):xs) (Err e') = return' xs (Err $ e ++ "|" ++ e')
+      return' ((Err e):xs) _ = return' xs (Err e)
+      return' (_:xs) (Err e) = return' xs (Err e)
+      return' (x:xs) _ = return' xs x
 
 displayRecord :: String -> String -> NominalDiffTime -> IO ()
 displayRecord project comment sec = do
