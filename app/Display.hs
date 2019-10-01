@@ -117,7 +117,12 @@ displayByDay p = do
         putStr "\n"
         showDay (fst p')
         putStr "\n"
+        displayBullet $ "Total jobs: " ++ show j
+        displayBullet $ "Total time: " ++ showSec t
+        putStr "\n"
         displayJobs $ snd p'
+          where
+            (j, t) = totalJobs $ concatJobs $ snd p'
       return' :: [Result'] -> Result' -> IO Result'
       return' [] r' = return r'
       return' ((Err e):xs) (Err e') = return' xs (Err $ e ++ "|" ++ e')
