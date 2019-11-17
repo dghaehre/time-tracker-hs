@@ -101,7 +101,7 @@ elemName s (x:xs)
 
 getProjects :: String -> StoredData -> Maybe [Project]
 getProjects p d
-  | length byName > 0 = Just byName
+  | not (null byName) = Just byName
   | p /= ""           = Nothing
   | otherwise         = Just $ projects d
   where
@@ -131,7 +131,7 @@ maybe' f a
 getByTime :: (UTCTime -> UTCTime -> Bool) -> String -> StoredData -> Maybe [Project]
 getByTime f n = maybe' (filter noJobs . map (filterJobs f)) . getProjects n
   where
-    noJobs x = 0 < length (File.jobs x)
+    noJobs x = not (null $ File.jobs x)
 
 -- Remove jobs that is not relevant
 filterJobs :: (UTCTime -> UTCTime -> Bool) -> Project -> Project
@@ -197,7 +197,7 @@ saveJob p j s = do
   displaySave p j s
   d <- getStoredData
   end <- getCurrentTime
-  either (\e -> return $ Err (toErr e)) (save' s end) d
+  either (return . Err . toErr) (save' s end) d
     where
       addJob s' e' p'
         | File.name p' == p = Project (File.name p') (File.jobs p' ++ [ Job j s' e' ]) -- TODO

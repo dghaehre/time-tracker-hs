@@ -7,7 +7,7 @@ import            System.Directory
 import            Data.Time
 import qualified  Data.ByteString.Lazy as B
 
-data StoredData = StoredData
+newtype StoredData = StoredData
   { projects  :: [Project] }
   deriving (Show, Read, Generic)
 
@@ -29,6 +29,9 @@ data Job = Job
   , endTime     :: UTCTime
   }
   deriving (Show, Read, Generic)
+
+instance Eq Job where
+  (==) a b = description a == description b
 
 instance FromJSON Job
 instance ToJSON Job

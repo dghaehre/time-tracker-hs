@@ -27,12 +27,12 @@ listProjects d = do
   putStr "Projects: "
   setSGR [SetColor Foreground Vivid White]
   putStrLn $ "(" ++ show (length (projects d)) ++ ")"
-  _ <- mapM_ (putStrLn . File.name) $ projects d
+  mapM_ (putStrLn . File.name) $ projects d
   return Finish
 
 -- Get total amount of jobs and total time spent
 totalJobs :: [Job] -> (Int, NominalDiffTime)
-totalJobs j = (length j, sum $ map getSec $ map getTime j)
+totalJobs j = (length j, sum $ map (getSec . getTime) j)
 
 concatJobs :: [Project] -> [Job]
 concatJobs = foldl (\b a -> jobs a ++ b) []
@@ -41,8 +41,7 @@ sortByDay :: [Project] -> ProjectsWithDay
 sortByDay ps = go ps $ M.fromList []
   where
     go :: [Project] -> ProjectsWithDay -> ProjectsWithDay
-    go [] d = d
-    go (p:ps') d = go ps' $ M.unionWith (++) d $ createWithDay p
+    go ps' d = foldl (\d' p -> M.unionWith (++) d' $ createWithDay p) d ps'
 
 createWithDay :: Project -> ProjectsWithDay
 createWithDay p = M.fromListWith concat' jobs'
@@ -125,8 +124,8 @@ displayByDay p = do
             (j, t) = totalJobs $ concatJobs $ snd p'
       return' :: [Result'] -> Result' -> IO Result'
       return' [] r' = return r'
-      return' ((Err e):xs) (Err e') = return' xs (Err $ e ++ "|" ++ e')
-      return' ((Err e):xs) _ = return' xs (Err e)
+      return' (Err e:xs) (Err e') = return' xs (Err $ e ++ "|" ++ e')
+      return' (Err e:xs) _ = return' xs (Err e)
       return' (_:xs) (Err e) = return' xs (Err e)
       return' (x:xs) _ = return' xs x
 
@@ -151,7 +150,7 @@ showSec sec = addZero h ++ "." ++ addZero m ++ "." ++ addZero s
   where
     sec' = round sec :: Int
     addZero s' | s' < 10 = "0" ++ show s'
-    addZero s' | otherwise = show s'
+    addZero s' = show s'
     s = sec' `mod` 60
     m = (sec' `div` 60) `mod` 60
     h = sec' `div` (60 * 60)
@@ -159,23 +158,12 @@ showSec sec = addZero h ++ "." ++ addZero m ++ "." ++ addZero s
 getSec :: (UTCTime, UTCTime) -> NominalDiffTime
 getSec (a, b) = b `diffUTCTime` a
 
-  {--
-getSec (start, end) = (toSec end) - (toSec start)
-  where
-    toSec :: String -> Int
-    toSec = f' . parseTimeM True defaultTimeLocale "%F %R:%S%Q %Z"
-      where
-        f' :: Maybe UTCTime -> Int
-        f' Nothing  = 0
-        f' (Just t) = read $ formatTime defaultTimeLocale "%s" t
-        --}
-
 getTime :: Job -> (UTCTime, UTCTime)
 getTime j = (startTime j, endTime j)
 
 displayJobs :: [Project] -> IO Result'
 displayJobs p = do
-  _ <- mapM_ d p
+  mapM_ d p
   return Finish
     where
       d :: Project -> IO ()
@@ -188,11 +176,19 @@ displayJobs p = do
         setSGR [SetColor Foreground Vivid White]
         putStr $ " (" ++ l ++ ") - "
         setSGR [SetColor Foreground Vivid Yellow]
-        putStrLn $ showSec (sum $ map getSec $ map getTime jobs')
+        putStrLn $ showSec (sum $ map (getSec . getTime) jobs')
         setSGR [SetColor Foreground Vivid White]
-        _ <- mapM_ displayJob $ jobs p'
+        mapM_ displayJob $ foldl addCounter [] (jobs p')
         putStr "\n"
         return ()
+          where
+            addCounter :: [(Job, Int)] -> Job -> [(Job, Int)] 
+            addCounter l j
+              | j `elem` map fst l  = map (insert j) l
+              | otherwise           = (j, 1) : l
+            insert j' (a, b)
+              | a == j'             = (a, b + 1)
+              | otherwise           = (a, b)
 
 displaySave :: String -> String -> UTCTime -> IO ()
 displaySave _ _ start = do
@@ -205,11 +201,13 @@ displaySave _ _ start = do
   putStrLn ""
   return ()
 
-displayJob :: Job -> IO ()
-displayJob j = do
-  displayBullet $ s ++ " (0) " ++ description j
+displayJob :: (Job, Int) -> IO ()
+displayJob (j, i) = displayBullet $ s ++ s' i ++ description j
     where
       s = showSec $ getSec $ getTime j
+      s' i'
+        | i' <= 1 = "     " 
+        | otherwise = " (" ++ show i' ++ ") "
 
 displayProject :: [Project] -> IO Result'
 displayProject _ = do
