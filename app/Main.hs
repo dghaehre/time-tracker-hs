@@ -7,6 +7,7 @@ import System.Console.CmdArgs
 import Control.Concurrent
 import Data.Maybe
 import Data.Time.Clock
+import Data.Time.Calendar
 import Data.Time.Calendar.WeekDate
 
 
@@ -120,8 +121,8 @@ filterWeek t s _ = t' <= utctDay s
 filterMonth :: UTCTime -> UTCTime -> UTCTime -> Bool
 filterMonth t s _ = t' <= utctDay s
   where
-    (y, m, _) = toWeekDate $ utctDay t
-    t' = fromWeekDate y (m - 1) 0
+    (y, m, _) = toGregorian $ utctDay t
+    t' = fromGregorian y m 0
 
 maybe' :: (a -> b) -> Maybe a -> Maybe b
 maybe' f a
