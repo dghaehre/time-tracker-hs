@@ -21,7 +21,9 @@ data Argument =
   | Week    { project :: String
             , byDay   :: Bool   }
   | Month   { project :: String
-            , byDay   :: Bool   }
+            , byDay   :: Bool
+            , month  :: Int
+            , year    :: Integer }
   | Delete  { project :: String }
   | List
   | Init
@@ -34,7 +36,7 @@ data Operation =
   | New' StoredData String
   | Today' StoredData String
   | Week' StoredData Bool String
-  | Month' StoredData Bool String
+  | Month' StoredData Bool String Int Integer
   | Error' String
   | Init'
   | Delete' StoredData String
@@ -52,9 +54,11 @@ week :: Argument
 week = Week { project = def &= help "Project name" &= typ "name"
             , byDay = def &= help "Sorted by day" &= typ "by-day" }
 
-month :: Argument
-month = Month { project = def &= help "Project name" &= typ "name"
-              , byDay = def &= help "Sorted by day" &= typ "by-day" }
+month' :: Argument
+month' = Month { project = def &= help "Project name" &= typ "name"
+              , byDay = def &= help "Sorted by day" &= typ "by-day"
+              , month = def &= help "Specify specific month" &= typ "month"
+              , year = def &= help "Specify yearh" &= typ "year" }
 
 new :: Argument
 new = New
@@ -83,16 +87,16 @@ toErr NotFound = "Could not find file.\nRun 'tt init' to create file in home dir
 toErr (Other s) = s
 
 operation :: Argument -> Either FileError StoredData -> Operation
-operation Init _                = Init'
-operation _ (Left e)            = Error' $ toErr e
-operation (New s) (Right p)     = New' p s
-operation List (Right p)        = List' p
-operation (Delete s) (Right p)  = Delete' p s
-operation (Today s) (Right p)   = Today' p s
-operation (Week s b) (Right p)  = Week' p b s
-operation (Month s b) (Right p)   = Month' p b s
-operation (Start s c) (Right p) = Start' p s c
-operation _ (Right p)           = Display' p
+operation Init _                    = Init'
+operation _ (Left e)                = Error' $ toErr e
+operation (New s) (Right p)         = New' p s
+operation List (Right p)            = List' p
+operation (Delete s) (Right p)      = Delete' p s
+operation (Today s) (Right p)       = Today' p s
+operation (Week s b) (Right p)      = Week' p b s
+operation (Month s b m y) (Right p) = Month' p b s m y
+operation (Start s c) (Right p)     = Start' p s c
+operation _ (Right p)               = Display' p
 
 elemName :: String -> [Project] -> Bool
 elemName _ [] = False
@@ -117,12 +121,21 @@ filterWeek t s _ = t' <= utctDay s
     (y, m, _) = toWeekDate $ utctDay t
     t' = fromWeekDate y m 0
 
+fst' :: (a, b, c) -> a
+fst' (a, _, _) = a
+
 -- TODO: handle first week in january..
-filterMonth :: UTCTime -> UTCTime -> UTCTime -> Bool
-filterMonth t s _ = t' <= utctDay s
+filterMonth :: UTCTime -> Int -> Integer -> UTCTime -> UTCTime -> Bool
+filterMonth t 0 0 s _ = t' <= utctDay s
   where
-    (y, m, _) = toGregorian $ utctDay t
-    t' = fromGregorian y m 0
+    (y', m, _) = toGregorian $ utctDay t
+    t' = fromGregorian y' m 0
+filterMonth t m y s _ = from <= utctDay s && to >= utctDay s
+  where
+    y' = if y == 0 then fst' $ toGregorian $ utctDay t else y
+    m' = if m == 0 then 1 else m
+    from  = fromGregorian y' m' 0
+    to  = fromGregorian y' m' (gregorianMonthLength y' m')
 
 maybe' :: (a -> b) -> Maybe a -> Maybe b
 maybe' f a
@@ -160,16 +173,16 @@ deleteProject d p
         remove x = File.name x /= p
 
 runOperation :: UTCTime -> Operation -> IO Result'
-runOperation _ (New' d s)     = createNew d s
-runOperation _ (List' d)      = listProjects d
-runOperation _ (Delete' d s)  = deleteProject d s
-runOperation t (Today' d s)   = displayToday $ getByTime (filterToday t) s d
-runOperation t (Week' d b s)  = displayWeek b $ getByTime (filterWeek t) s d
-runOperation t (Month' d b s) = displayMonth b $ getByTime (filterMonth t) s d
-runOperation _ (Start' d s c) = record' d s c
-runOperation _ Init'          = createFile
-runOperation _ (Error' e)     = return $ Err e
-runOperation _ (Display' _)   = return $ Err "Display operation not ready"
+runOperation _ (New' d s)         = createNew d s
+runOperation _ (List' d)          = listProjects d
+runOperation _ (Delete' d s)      = deleteProject d s
+runOperation t (Today' d s)       = displayToday $ getByTime (filterToday t) s d
+runOperation t (Week' d b s)      = displayWeek b $ getByTime (filterWeek t) s d
+runOperation t (Month' d b s m y) = displayMonth b $ getByTime (filterMonth t m y) s d
+runOperation _ (Start' d s c)     = record' d s c
+runOperation _ Init'              = createFile
+runOperation _ (Error' e)         = return $ Err e
+runOperation _ (Display' _)       = return $ Err "Display operation not ready"
 
 record' :: StoredData -> String -> String -> IO Result'
 record' d p job = do
@@ -210,7 +223,7 @@ saveJob p j s = do
 
 main :: IO ()
 main = do
-  input <- cmdArgs $ modes [new, start, display, list, delete, today, week, month, initP]
+  input <- cmdArgs $ modes [new, start, display, list, delete, today, week, month', initP]
     &= help "Track time spent on projects"
     &= program "tt"
     &= summary "Time tracker v0.1"
