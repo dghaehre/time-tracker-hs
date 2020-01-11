@@ -182,13 +182,14 @@ displayJobs p = do
         putStr "\n"
         return ()
           where
-            addCounter :: [(Job, Int)] -> Job -> [(Job, Int)] 
+            addCounter :: [(Job, Int, NominalDiffTime)] -> Job -> [(Job, Int, NominalDiffTime)] 
             addCounter l j
-              | j `elem` map fst l  = map (insert j) l
-              | otherwise           = (j, 1) : l
-            insert j' (a, b)
-              | a == j'             = (a, b + 1)
-              | otherwise           = (a, b)
+              | j `elem` map fst' l  = map (insert j) l
+              | otherwise           = (j, 1, getSec $ getTime j) : l
+            insert j' (a, b, c)
+              | a == j'             = (a, b + 1, getSec (getTime j') + c)
+              | otherwise           = (a, b, c)
+            fst' (a, b, c) = a
 
 displaySave :: String -> String -> UTCTime -> IO ()
 displaySave _ _ start = do
@@ -201,10 +202,9 @@ displaySave _ _ start = do
   putStrLn ""
   return ()
 
-displayJob :: (Job, Int) -> IO ()
-displayJob (j, i) = displayBullet $ s ++ s' i ++ description j
+displayJob :: (Job, Int, NominalDiffTime) -> IO ()
+displayJob (j, i, n) = displayBullet $ showSec n ++ s' i ++ description j
     where
-      s = showSec $ getSec $ getTime j
       s' i'
         | i' <= 1 = "     " 
         | otherwise = " (" ++ show i' ++ ") "
